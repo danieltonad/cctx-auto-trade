@@ -162,9 +162,6 @@ class AutoTrader:
                 
         else:
             print("Trading Conditions not met!, Retrying after 5 seconds.")
-            sleep(5)
-            self.start_trade(self)
-
     
     # Trading decision based on strategy
     def should_enter_trade(self, buy_price_threshold: float, trade_amount: float):
