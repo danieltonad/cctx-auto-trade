@@ -82,10 +82,9 @@ class AutoTrader:
         prev_data = []
         with open("trading_history.json", "r") as file:
             prev_data =  json.load(file)
-            
+            prev_data.append(trade_data)
         with open("trading_history.json", "w") as file:
-            json.dump(prev_data.append(trade_data), file)
-            file.write("\n")
+            json.dump(prev_data, file)
 
     # Monitor and execute based on profit/loss conditions
     def __auto_execute_trade(self, trade_amount):
