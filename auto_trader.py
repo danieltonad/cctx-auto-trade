@@ -1,15 +1,24 @@
 from config import Config
-import ccxt
+import json
 from ccxt import bybit
 import pandas as pd
-
+from datetime import datetime
+from time import sleep
 
 class AutoTrader:
-    symbol: str = None
-    balance: dict = None
-    exchange: bybit = None
-    ticker: bybit.tickers = None
+    symbol: str
+    balance: dict
+    exchange: bybit
+    ticker: dict
+    entry_price: float
+    take_profit_price: float
+    stop_loss_price: float
+    buy_price_threshold: int
     min_btc: float = 0.0001
+    amount: int
+    proceed_trading: bool
+    initial_order_id: str
+    exit_order_id: str
     
     def __init__(self) -> None:
         config = Config()
@@ -17,70 +26,150 @@ class AutoTrader:
             'apiKey': config.API_KEY,
             'secret': config.API_SECERET,
         })
-        # self.exchange.verbose = True
+        
+        self.symbol = config.TICKER_SYMBOL
         self.exchange.set_sandbox_mode(True)
         self.exchange.options["defaultType"] = "future"
         self.balance = self.exchange.fetch_balance()
-        self.symbol = config.TICKER_SYMBOL
         self.ticker = self.exchange.fetch_ticker(self.symbol)
- 
-
-    def trade(self, buy_price_threshold: float, amount_to_invest: float):
+        
+    def set_amount(self, amount: int):
         last = float(self.ticker['last'])
-        btc_amount = amount_to_invest / last
+        btc_amount = amount / last
         
         if btc_amount < self.min_btc:
             min_usd = int(self.min_btc * last)
-            print(f"Minimum USDT: {min_usd:,.2f}")
-            return
+            raise ValueError(f"Amount less than minimum \nMinimum Amount: {min_usd:,.2f} USDT")
+        # proceed to set amount
+        self.amount = amount
+        
+    def trade_config(self, entry_price: float, profit_percentage: float, loss_percentage, buy_price_threshold: float):
+        if not self.amount:
+            raise ValueError("Setup amount before trade configuration ")
+            
+        self.entry_price = entry_price
+        self.buy_price_threshold = buy_price_threshold
+        self.stop_loss_price = (1 + (loss_percentage / 100))
+        self.take_profit_price = (1 + (profit_percentage / 100))
+        
+        
+    def set_amount(self, amount: int):
+        last = float(self.ticker['last'])
+        btc_amount = amount / last
+        # validate min amount
+        if btc_amount < self.min_btc:
+            min_usd = int(self.min_btc * last)
+            raise ValueError(f"Amount less than minimum \nMinimum Amount: {min_usd:,.2f} USDT")
+        
+        self.amount = amount
+        
+    def __get_current_price(self) -> float:
+        ticker = self.exchange.fetch_ticker(self.symbol)
+        return float(ticker['last'])
+
+    # Function to place an initial order
+    def __place_initial_order(self, trade_amount) -> dict:
+        return self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=trade_amount)
+
+    # Function to calculate profit/loss
+    def __calculate_profit_loss(self, current_price, trade_amount):
+        profit_loss = (current_price - self.entry_price) * trade_amount
+        percentage = ((current_price - self.entry_price) / self.entry_price) * 100
+        return profit_loss, percentage
+
+    # Function to save trading history
+    def __save_trading_history(self, trade_data):
+        prev_data = []
+        with open("trading_history.json", "r") as file:
+            prev_data =  json.load(file)
+            
+        with open("trading_history.json", "w") as file:
+            json.dump(prev_data.append(trade_data), file)
+            file.write("\n")
+
+    # Monitor and execute based on profit/loss conditions
+    def __auto_execute_trade(self, trade_amount):
+        try:
+            while True:
+                current_price = self.__get_current_price()
+                profit_loss, percentage = self.__calculate_profit_loss(current_price, trade_amount)
+                print(f"Current Price: {current_price} USDT | Profit/Loss: {profit_loss:,.2f} USDT ({percentage:,.2f}%)")
+
+                if current_price >= self.take_profit_price:
+                    # Place a take-profit sell order
+                    take_profit_order = self.exchange.create_order(symbol=self.symbol, type='market', side='sell', amount=trade_amount)
+                    self.exit_order_id = take_profit_order.get("info").get("orderId")
+                    print(f"Take-profit order executed at {current_price} USDT")
+                    self.__save_trading_history({
+                        'time': datetime.now().isoformat(),
+                        'symbol': self.symbol,
+                        'initial_order_id': self.initial_order_id,
+                        'exit_order_id': self.exit_order_id,
+                        'exit_type': 'take-profit',
+                        'price': current_price,
+                        'amount': self.amount,
+                        'profit_loss': profit_loss,
+                        'percentage': percentage,
+                    })
+                    break
+
+                if current_price <= self.stop_loss_price:
+                    # Place a stop-loss sell order
+                    stop_loss_order = self.exchange.create_order(symbol=self.symbol, type='market', side='sell', amount=trade_amount)
+                    self.exit_order_id = stop_loss_order.get("info").get("orderId")
+                    print(f"Stop-loss order executed at {current_price} USDT")
+                    self.__save_trading_history({
+                        'time': datetime.now().isoformat(),
+                        'symbol': self.symbol,
+                        'initial_order_id': self.initial_order_id,
+                        'exit_order_id': self.exit_order_id,
+                        'exit_type': 'stop-loss',
+                        'price': current_price,
+                        'amount': self.amount,
+                        'profit_loss': profit_loss,
+                        'percentage': percentage,
+                    })
+                    break
+
+                sleep(10)  # Check every 10 seconds
+                
+        except KeyboardInterrupt:
+            print("Stopped monitoring...")
+ 
+
+    def start_trade(self):
+        last = float(self.ticker['last'])
+        trade_amount = self.amount / last
         
         balance = self.balance[self.symbol.split('/')[-1]]['free']
-        if balance < amount_to_invest:
-            print(f"Insufficient Balance to trade \nCurrent Balance: {balance:,.2f}")
-            return
+        if balance < self.amount:
+            raise ValueError(f"Insufficient Balance to trade \nCurrent Balance: {balance:,.2f}")
             
+        print("Staring trade ...")
             
-        if self.should_enter_trade(buy_price_threshold, amount_to_invest):
+        if self.should_enter_trade(self.buy_price_threshold, self.amount):
             try:
-                order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=btc_amount)
+                order = self.__place_initial_order(trade_amount)
                 order_id = order.get("info").get("orderId")
-                order_details = self.exchange.fetch_open_order(order_id, symbol=self.symbol)
+                # order_details = self.exchange.fetch_open_order(order_id, symbol=self.symbol)
+                print(f"[Initial Order Placed] id => {order_id}")
+                self.initial_order_id = order_id
                 
-                print(f"Order placed: {order_details}")
+                # monitor trading
+                self.__auto_execute_trade(trade_amount)
+                
             except Exception as e:
-                print(f"An error occurred: {e}")
+                raise NotImplementedError(f"An error occurred: {e}")
                 
         else:
-            print("Trading Conditions not met! ")
-        
-    
-    
-    def create_take_profit_order(self, amount, entry_price, take_profit_price):
-        # Place the initial buy order
-        buy_order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=amount)
-        print(f"Buy order placed: {buy_order}")
-        
-        # Calculate take profit order price
-        if take_profit_price <= entry_price:
-            print("Take profit price must be higher than the entry price for a long position.")
-            return
+            print("Trading Conditions not met!, Retrying after 5 seconds.")
+            sleep(5)
+            self.start_trade(self)
 
-        # Place the take profit sell order
-        take_profit_order = self.exchange.create_order(
-            symbol=self.symbol,
-            type='limit',
-            side='sell',
-            amount=amount,
-            price=take_profit_price,
-            params={'reduce_only': True}  # Ensure this order only reduces the position
-        )
-        print(f"Take profit order placed: {take_profit_order}")
-    
-    
     
     # Trading decision based on strategy
-    def should_enter_trade(self, buy_price_threshold: float, amount_to_invest: float):
-        if float(self.ticker['last']) < buy_price_threshold and self.balance[self.symbol.split('/')[-1]]['free'] >= amount_to_invest:
+    def should_enter_trade(self, buy_price_threshold: float, trade_amount: float):
+        if float(self.ticker['last']) < buy_price_threshold and self.balance[self.symbol.split('/')[-1]]['free'] >= trade_amount:
             return True
         return False
     
@@ -89,10 +178,18 @@ class AutoTrader:
         
         
         
+        
+        
+        
+        
+        
+        
+        
+        
     def test(self):
-        self.exchange.create_market_buy_order()
-        order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=0.0001)
-        order_id = order.get("info").get("orderId")
+        # self.exchange.create_market_buy_order()
+        # order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=0.0001)
+        # order_id = order.get("info").get("orderId")
         # print(self.balance, "\n\n")
         
         # orders = self.exchange.fetch_open_orders(symbol=self.symbol)
@@ -101,6 +198,7 @@ class AutoTrader:
         
         # order_details = self.exchange.fetch_open_order(id=order_id, symbol="BTC/USDT")
         # print(order_details)
+        print(self.balance)
 
 
     # Generate profit/loss report
