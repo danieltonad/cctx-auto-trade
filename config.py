@@ -8,6 +8,7 @@ class Config:
     API_SECERET: str = os.getenv("API_SECERET")
     EXCHANGE_ID: str = "bybit"
     TICKER_SYMBOL: str = "BTC/USDT"
+    REPORT_FILE: str = "trading_history.json"
     
     
 config = Config()

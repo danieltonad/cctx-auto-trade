@@ -1,7 +1,7 @@
 from config import Config
 import json
 from ccxt import bybit
-import pandas as pd
+from pandas import DataFrame, read_json
 from datetime import datetime
 from time import sleep
 
@@ -49,8 +49,8 @@ class AutoTrader:
             
         self.entry_price = entry_price
         self.buy_price_threshold = buy_price_threshold
-        self.stop_loss_price = (1 + (loss_percentage / 100))
-        self.take_profit_price = (1 + (profit_percentage / 100))
+        self.stop_loss_price = self.entry_price * (1 - (loss_percentage / 100))
+        self.take_profit_price = self.entry_price * (1 + (profit_percentage / 100))
         
         
     def set_amount(self, amount: int):
@@ -80,10 +80,10 @@ class AutoTrader:
     # Function to save trading history
     def __save_trading_history(self, trade_data):
         prev_data = []
-        with open("trading_history.json", "r") as file:
+        with open(Config.REPORT_FILE, "r") as file:
             prev_data =  json.load(file)
             prev_data.append(trade_data)
-        with open("trading_history.json", "w") as file:
+        with open(Config.REPORT_FILE, "w") as file:
             json.dump(prev_data, file)
 
     # Monitor and execute based on profit/loss conditions
@@ -92,7 +92,7 @@ class AutoTrader:
             while True:
                 current_price = self.__get_current_price()
                 profit_loss, percentage = self.__calculate_profit_loss(current_price, trade_amount)
-                print(f"Current Price: {current_price} USDT | Profit/Loss: {profit_loss:,.2f} USDT ({percentage:,.2f}%)")
+                print(f"Current Price: {current_price} USDT | Profit/Loss: {profit_loss:,.2f} USDT ({percentage:,.2f}%) \n")
 
                 if current_price >= self.take_profit_price:
                     # Place a take-profit sell order
@@ -130,7 +130,7 @@ class AutoTrader:
                     })
                     break
 
-                sleep(10)  # Check every 10 seconds
+                sleep(5)  # monitor every 5 seconds
                 
         except KeyboardInterrupt:
             print("Stopped monitoring...")
@@ -176,34 +176,11 @@ class AutoTrader:
         self.exchange.fetch_open_order(id=order_id, symbol=self.symbol)
         
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-    def test(self):
-        # self.exchange.create_market_buy_order()
-        # order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=0.0001)
-        # order_id = order.get("info").get("orderId")
-        # print(self.balance, "\n\n")
-        
-        # orders = self.exchange.fetch_open_orders(symbol=self.symbol)
-        # print("\n\n", orders)
-        
-        
-        # order_details = self.exchange.fetch_open_order(id=order_id, symbol="BTC/USDT")
-        # print(order_details)
-        print(self.balance)
 
 
     # Generate profit/loss report
     def generate_report(self):
-        trades = self.exchange.fetch_my_trades('BTC/USDT')
-        df = pd.DataFrame(trades)
+        df = DataFrame(read_json(Config.REPORT_FILE))
         df['profit_loss'] = df['price'] * df['amount']
-        # df.to_csv('crypto_trading_report.csv')
+        df.to_csv('crypto_trading_report.csv')
         print(df)

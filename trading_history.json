@@ -1,1 +1,24 @@
-[]
+[
+	{
+		"time": "2024-07-31T05:00:32.463056",
+		"symbol": "BTC/USDT",
+		"initial_order_id": "1742300725897423104",
+		"exit_order_id": "1742300734059538688",
+		"exit_type": "take-profit",
+		"price": 62285.12,
+		"amount": 10,
+		"profit_loss": -0.7239548941334719,
+		"percentage": -6.728084099553741
+	},
+	{
+		"time": "2024-07-31T05:05:59.153424",
+		"symbol": "BTC/USDT",
+		"initial_order_id": "1742303466170444032",
+		"exit_order_id": "1742303474567440640",
+		"exit_type": "stop-loss",
+		"price": 62445.36,
+		"amount": 10,
+		"profit_loss": -0.6758141115218462,
+		"percentage": -6.347880860253756
+	}
+]
