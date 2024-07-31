@@ -8,6 +8,8 @@ class AutoTrader:
     symbol: str = None
     balance: dict = None
     exchange: bybit = None
+    ticker: bybit.tickers = None
+    min_btc: float = 0.0
     
     def __init__(self) -> None:
         config = Config()
@@ -15,24 +17,65 @@ class AutoTrader:
             'apiKey': config.API_KEY,
             'secret': config.API_SECERET,
         })
+        # self.exchange.verbose = True
         self.exchange.set_sandbox_mode(True)
         self.exchange.options["defaultType"] = "future"
         self.balance = self.exchange.fetch_balance()
         self.symbol = config.TICKER_SYMBOL
+        self.ticker = self.exchange.fetch_ticker(self.symbol)
  
 
-    # Trading strategy example (simplified)
-    def trade(self):
-        ticker = self.exchange.fetch_ticker('BTC/USDT')
-        price = ticker['last']
+    def trade(self, buy_price_threshold: float, amount_to_invest: float):
+        last = float(self.ticker['last'])
+        btc_amount = amount_to_invest / last
         
-        # Example strategy: Buy if balance allows, sell if we have BTC
-        if self.balance['USDT']['free'] > price:
-            order = self.exchange.create_market_buy_order('BTC/USDT', 1)
-        elif self.balance['BTC']['free'] > 0:
-            order = self.exchange.create_market_sell_order('BTC/USDT', 1)
-        return order
+        if btc_amount < self.min_btc:
+            min_usd = int(btc_amount * last)
+            print(f"Minimum USDT: {min_usd:,.2f}")
+            
+        if self.should_enter_trade(buy_price_threshold, amount_to_invest):
+            try:
+                order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=btc_amount)
+                order_id = order.get("info").get("orderId")
+                order_details = self.get_order_details(order_id)
+                
+                print(f"Order placed: {order_details}")
+            except Exception as e:
+                print(f"An error occurred: {e}")
+                
+        else:
+            print("Trading Conditions not met! ")
+        
+        
     
+    # Trading decision based on strategy
+    def should_enter_trade(self, buy_price_threshold: float, amount_to_invest: float):
+        if float(self.ticker['last']) < buy_price_threshold and self.balance[self.symbol.split('/')[-1]]['free'] >= amount_to_invest:
+            return True
+        return False
+    
+    def get_order_details(self, order_id: str):
+        self.exchange.fetch_open_order(id=order_id, symbol=self.symbol)
+        
+        
+        
+    def test(self):
+        
+        ticker = self.exchange.fetch_ticker(self.symbol)
+        print(ticker)
+        
+        # order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=0.001)
+        # order_id = order.get("info").get("orderId")
+        # print(self.balance, "\n\n")
+        
+        # orders = self.exchange.fetch_open_orders(symbol=self.symbol)
+        # print("\n\n", orders)
+        
+        
+        # order_details = self.exchange.fetch_open_order(id=order_id, symbol="BTC/USDT")
+        # print(order_details)
+
+
     # Generate profit/loss report
     def generate_report(self):
         trades = self.exchange.fetch_my_trades('BTC/USDT')
@@ -40,12 +83,3 @@ class AutoTrader:
         df['profit_loss'] = df['price'] * df['amount']
         # df.to_csv('crypto_trading_report.csv')
         print(df)
-        
-        
-    def test(self):
-        order = self.exchange.create_order(symbol=self.symbol, type='Market', side='Buy', amount=0.03)
-        print(self.exchange.symbols)
-        
-        orders = self.exchange.fetch_open_orders(symbol=self.symbol)
-        print("\n\n", orders)
-
