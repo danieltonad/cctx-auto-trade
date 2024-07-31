@@ -9,7 +9,7 @@ class AutoTrader:
     balance: dict = None
     exchange: bybit = None
     ticker: bybit.tickers = None
-    min_btc: float = 0.0
+    min_btc: float = 0.0001
     
     def __init__(self) -> None:
         config = Config()
@@ -30,14 +30,21 @@ class AutoTrader:
         btc_amount = amount_to_invest / last
         
         if btc_amount < self.min_btc:
-            min_usd = int(btc_amount * last)
+            min_usd = int(self.min_btc * last)
             print(f"Minimum USDT: {min_usd:,.2f}")
+            return
+        
+        balance = self.balance[self.symbol.split('/')[-1]]['free']
+        if balance < amount_to_invest:
+            print(f"Insufficient Balance to trade \nCurrent Balance: {balance:,.2f}")
+            return
+            
             
         if self.should_enter_trade(buy_price_threshold, amount_to_invest):
             try:
                 order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=btc_amount)
                 order_id = order.get("info").get("orderId")
-                order_details = self.get_order_details(order_id)
+                order_details = self.exchange.fetch_open_order(order_id, symbol=self.symbol)
                 
                 print(f"Order placed: {order_details}")
             except Exception as e:
@@ -46,7 +53,30 @@ class AutoTrader:
         else:
             print("Trading Conditions not met! ")
         
+    
+    
+    def create_take_profit_order(self, amount, entry_price, take_profit_price):
+        # Place the initial buy order
+        buy_order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=amount)
+        print(f"Buy order placed: {buy_order}")
         
+        # Calculate take profit order price
+        if take_profit_price <= entry_price:
+            print("Take profit price must be higher than the entry price for a long position.")
+            return
+
+        # Place the take profit sell order
+        take_profit_order = self.exchange.create_order(
+            symbol=self.symbol,
+            type='limit',
+            side='sell',
+            amount=amount,
+            price=take_profit_price,
+            params={'reduce_only': True}  # Ensure this order only reduces the position
+        )
+        print(f"Take profit order placed: {take_profit_order}")
+    
+    
     
     # Trading decision based on strategy
     def should_enter_trade(self, buy_price_threshold: float, amount_to_invest: float):
@@ -60,12 +90,9 @@ class AutoTrader:
         
         
     def test(self):
-        
-        ticker = self.exchange.fetch_ticker(self.symbol)
-        print(ticker)
-        
-        # order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=0.001)
-        # order_id = order.get("info").get("orderId")
+        self.exchange.create_market_buy_order()
+        order = self.exchange.create_order(symbol=self.symbol, type='market', side='buy', amount=0.0001)
+        order_id = order.get("info").get("orderId")
         # print(self.balance, "\n\n")
         
         # orders = self.exchange.fetch_open_orders(symbol=self.symbol)
