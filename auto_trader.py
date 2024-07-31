@@ -180,6 +180,7 @@ class AutoTrader:
 
     # Generate profit/loss report
     def generate_report(self):
+        print("\n********  Generating REPORTS  *******\n")
         df = DataFrame(read_json(Config.REPORT_FILE))
         df['profit_loss'] = df['price'] * df['amount']
         df.to_csv('crypto_trading_report.csv')

@@ -7,7 +7,7 @@ price_threshold = 66600
 amount_to_trade = 10
 entry_price = 66678
 profit_percentage = 1
-loss_percentage = 6.9
+loss_percentage = 6
 
 # set amount to trade with
 trader.set_amount(amount_to_trade)
