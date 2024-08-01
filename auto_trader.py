@@ -5,7 +5,7 @@ from pandas import DataFrame, read_json
 from datetime import datetime
 from time import sleep
 
-class AutoTrader:
+class AutoTrader(Config):
     symbol: str
     balance: dict
     exchange: bybit
@@ -21,13 +21,12 @@ class AutoTrader:
     exit_order_id: str
     
     def __init__(self) -> None:
-        config = Config()
         self.exchange = bybit({
-            'apiKey': config.API_KEY,
-            'secret': config.API_SECERET,
+            'apiKey': self.API_KEY,
+            'secret': self.API_SECERET,
         })
         
-        self.symbol = config.TICKER_SYMBOL
+        self.symbol = self.TICKER_SYMBOL
         self.exchange.set_sandbox_mode(True)
         self.exchange.options["defaultType"] = "future"
         self.balance = self.exchange.fetch_balance()
@@ -80,10 +79,10 @@ class AutoTrader:
     # Function to save trading history
     def __save_trading_history(self, trade_data):
         prev_data = []
-        with open(Config.REPORT_FILE, "r") as file:
+        with open(self.REPORT_FILE, "r") as file:
             prev_data =  json.load(file)
             prev_data.append(trade_data)
-        with open(Config.REPORT_FILE, "w") as file:
+        with open(self.REPORT_FILE, "w") as file:
             json.dump(prev_data, file)
 
     # Monitor and execute based on profit/loss conditions
@@ -178,7 +177,7 @@ class AutoTrader:
     # Generate profit/loss report
     def generate_report(self):
         print("\n********  Generating REPORTS  *******\n")
-        df = DataFrame(read_json(Config.REPORT_FILE))
+        df = DataFrame(read_json(self.REPORT_FILE))
         df['profit_loss'] = df['price'] * df['amount']
         df.to_csv('crypto_trading_report.csv')
         print(df)

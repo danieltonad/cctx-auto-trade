@@ -3,11 +3,11 @@ from auto_trader import AutoTrader
 
 trader = AutoTrader()
 
-price_threshold = 66600
+price_threshold = 66_600
 amount_to_trade = 10
-entry_price = 66678
+entry_price = 66_678
 profit_percentage = 2
-loss_percentage = 5.1
+loss_percentage = 2.1
 
 # set amount to trade with
 trader.set_amount(amount_to_trade)
